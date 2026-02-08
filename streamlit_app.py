@@ -47,7 +47,23 @@ MODEL_PATH = "model.pkl"
 SCALER_PATH = "scaler.pkl"
 
 SCAN_MODEL_PATH = "neuro_model.keras"  
+SCAN_MODEL_URL = (
+    "https://huggingface.co/LeonGoatedYes/NeuroblastomaScanDetector/resolve/main/neuro_model.keras"
+)
 
+def download_model_if_needed():
+    if os.path.exists(SCAN_MODEL_PATH):
+        return
+
+    with st.spinner("📥 Downloading scan model…"):
+        r = requests.get(SCAN_MODEL_URL, stream=True, timeout=60)
+        r.raise_for_status()
+
+        with open(SCAN_MODEL_PATH, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    
 # ---------------- Translations (FIXED - COMPLETE) ----------------
 translations = {
     "English": {
@@ -275,23 +291,28 @@ def load_model_and_scaler():
     model = joblib.load(MODEL_PATH)
     scaler = joblib.load(SCALER_PATH)
     return model, scaler, None
+    
 
-# Load imaging model with TensorFlow check
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def load_scan_model():
     if not TENSORFLOW_AVAILABLE:
-        return None, "TensorFlow not installed, imaging model not available."
-    if not os.path.exists(SCAN_MODEL_PATH):
-        return None, f"Scan model file not found: {SCAN_MODEL_PATH}"
-    scan_model = load_model(SCAN_MODEL_PATH)
-    return scan_model, None
+        return None, "TensorFlow not installed."
 
-model, scaler, load_error = load_model_and_scaler()
+    try:
+        download_model_if_needed()  # <--- here
+        model = load_model(SCAN_MODEL_PATH)
+        return model, None
+    except Exception as e:
+        return None, str(e)
+
+# Load the scan model
 scan_model, scan_load_error = load_scan_model()
 
-if load_error:
-    st.error(load_error)
-    st.stop()
+if scan_load_error:
+    st.error(f"❌ Scan model failed to load: {scan_load_error}")
+else:
+    st.success("✅ Scan model loaded successfully")
+
 
 # ---------------- Helpers ----------------
 def gender_to_numeric(g):
